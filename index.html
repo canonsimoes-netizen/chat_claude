@@ -174,6 +174,11 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:10px;paddi
     <div class="t"><b id="rTitle"></b><small><span class="st" id="st"></span><span id="online">—</span></small></div>
     <button class="ib" id="toolsBtn" title="Testes">🧪</button>
     <button class="ib" id="share" title="Partilhar convite">🔗</button>
+    <button class="ib" id="menuBtn" title="Mais">⋯</button>
+  </div>
+  <div id="menu" style="display:none;position:absolute;right:12px;top:calc(58px + env(safe-area-inset-top));background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:6px;z-index:8;min-width:200px">
+    <button class="link" id="mLeave" style="display:block;width:100%;text-align:left;padding:10px;color:var(--text);font-size:15px">🚪 Sair da sala</button>
+    <button class="link" id="mDelete" style="display:none;width:100%;text-align:left;padding:10px;color:var(--red);font-size:15px">🗑 Apagar sala</button>
   </div>
 
   <div id="tools">
@@ -223,6 +228,7 @@ create table if not exists rooms (
   id         uuid primary key default gen_random_uuid(),
   code       text unique not null,
   name       text not null,
+  owner_id   text,
   created_at timestamptz not null default now()
 );
 
@@ -248,6 +254,7 @@ create policy "rooms_select" on rooms    for select to anon using (true);
 create policy "rooms_insert" on rooms    for insert to anon with check (true);
 create policy "msgs_select"  on messages for select to anon using (true);
 create policy "msgs_insert"  on messages for insert to anon with check (true);
+create policy "rooms_delete" on rooms    for delete to anon using (true);
 
 -- Realtime
 alter publication supabase_realtime add table messages;`;
@@ -356,7 +363,15 @@ function renderRecent() {
   list.forEach(r => {
     const it = el('div', 'it');
     const l = el('div'); l.appendChild(el('b', '', r.name)); l.appendChild(document.createElement('br')); l.appendChild(el('small', '', r.code));
-    it.appendChild(l); it.appendChild(el('span', '', '›'));
+    it.appendChild(l);
+    const x = el('button', 'ib', '✕'); x.style.cssText = 'width:34px;height:34px;color:var(--muted)'; x.title = 'Tirar da lista';
+    x.onclick = ev => {
+      ev.stopPropagation();
+      if (!confirm('Tirar "' + r.name + '" da tua lista?\n(A sala continua a existir; podes voltar a entrar pelo link.)')) return;
+      LS.set('rooms', LS.get('rooms', []).filter(z => z.code !== r.code));
+      renderRecent();
+    };
+    it.appendChild(x);
     it.onclick = () => { if (ensureNick()) joinRoom(r.code); };
     box.appendChild(it);
   });
@@ -399,7 +414,7 @@ $('#createRoom').onclick = async () => {
   const name = $('#roomName').value.trim() || 'Nova sala';
   const btn = $('#createRoom'); btn.disabled = true;
   try {
-    const { data, error } = await state.sb.from('rooms').insert({ code: genCode(), name }).select().single();
+    const { data, error } = await state.sb.from('rooms').insert({ code: genCode(), name, owner_id: state.user.id }).select().single();
     if (error) throw error;
     $('#roomName').value = '';
     openRoom(data);
@@ -601,6 +616,37 @@ $('#share').onclick = async () => {
   if (canNativeShare) { try { await navigator.share({ title: state.room.name, text: 'Entra na sala "' + state.room.name + '"', url: link }); return; } catch {} }
   try { await navigator.clipboard.writeText(link); if (location.protocol !== 'file:') toast('Link de convite copiado ✓'); }
   catch { prompt('Copia o link de convite:', link); }
+};
+
+/* ---- menu: sair / apagar ---- */
+const menu = $('#menu');
+$('#menuBtn').onclick = ev => {
+  ev.stopPropagation();
+  const isOwner = state.room && state.room.owner_id && state.room.owner_id === state.user.id;
+  $('#mDelete').style.display = isOwner ? 'block' : 'none';
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+};
+document.addEventListener('click', () => { menu.style.display = 'none'; });
+
+function leaveToLobby() {
+  closeChannel(); state.room = null;
+  history.replaceState(null, '', location.pathname + location.search);
+  goLobby();
+}
+$('#mLeave').onclick = () => {
+  if (!confirm('Sair da sala "' + state.room.name + '"?\n(A sala continua a existir; podes voltar a entrar pelo link.)')) return;
+  LS.set('rooms', LS.get('rooms', []).filter(r => r.code !== state.room.code));
+  leaveToLobby();
+};
+$('#mDelete').onclick = async () => {
+  const r = state.room;
+  if (!confirm('APAGAR a sala "' + r.name + '" para TODOS?\nIsto apaga também todas as mensagens e não dá para desfazer.')) return;
+  const { data, error } = await state.sb.from('rooms').delete().eq('id', r.id).select();
+  if (error) return toast(errMsg(error));
+  if (!data || !data.length) return toast('Não foi possível apagar — corre o SQL de atualização no Supabase (política de apagar).', 6000);
+  LS.set('rooms', LS.get('rooms', []).filter(x => x.code !== r.code));
+  toast('Sala apagada');
+  leaveToLobby();
 };
 
 $('#back').onclick = () => {
