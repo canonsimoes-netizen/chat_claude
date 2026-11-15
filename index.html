@@ -2,8 +2,16 @@
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sala · Chat Supabase</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Sala</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sala">
+<meta name="theme-color" content="#0f1117">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
 :root{
   --bg:#0f1117; --surface:#1a1d27; --surface2:#232736; --border:#2d3245;
@@ -11,10 +19,16 @@
   --blue:#4f8ef7; --green:#34c77b; --orange:#f59e42; --red:#ef5b5b;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html,body{height:100%;width:100%}
+body{position:fixed;top:0;left:0;right:0}
+body.kb{padding-bottom:0 !important}
 body{background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);overflow:hidden}
 button,input,textarea{font:inherit;color:inherit}
+input,textarea{font-size:16px} /* evita o zoom automático do iOS ao escrever */
+html{background:var(--bg);overscroll-behavior:none}
+body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+.top,.comp,.btn,.ib{-webkit-user-select:none;user-select:none}
 button{cursor:pointer}
 .screen{display:none;height:100%;flex-direction:column}
 .screen.on{display:flex}
@@ -594,6 +608,25 @@ $('#back').onclick = () => {
   history.replaceState(null, '', location.pathname + location.search);
   goLobby();
 };
+
+/* ================= TECLADO (iOS) ================= */
+// Mantém a app encaixada na área visível quando o teclado abre,
+// em vez de a página dar zoom/saltar.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const fit = () => {
+    document.body.style.height = vv.height + 'px';
+    document.body.style.top = vv.offsetTop + 'px';
+    document.body.classList.toggle('kb', vv.height < window.innerHeight * 0.8);
+    if (state.room && nearBottomSoon) scrollBottom(true);
+  };
+  let nearBottomSoon = false;
+  $('#input').addEventListener('focus', () => { nearBottomSoon = true; setTimeout(() => { fit(); window.scrollTo(0, 0); }, 300); });
+  $('#input').addEventListener('blur', () => { nearBottomSoon = false; setTimeout(() => { fit(); window.scrollTo(0, 0); }, 100); });
+  vv.addEventListener('resize', fit);
+  vv.addEventListener('scroll', fit);
+  fit();
+}
 
 /* ================= ARRANQUE ================= */
 function boot() {
