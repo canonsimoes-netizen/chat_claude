@@ -122,6 +122,13 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:10px;paddi
       <div class="colors" id="colors"></div>
     </div>
 
+    <div id="invite" class="card" style="display:none;border-color:var(--green);margin-top:16px">
+      <b id="invTitle">Foste convidado para uma sala</b>
+      <p class="sub" id="invSub" style="margin-top:4px">Escreve o teu nome acima e toca no botão.</p>
+      <button class="btn green" id="invGo" style="width:100%;margin-top:10px">Entrar na sala</button>
+    </div>
+
+    <div id="others">
     <h2>Criar sala</h2>
     <div class="card">
       <div class="row2" style="margin-top:0">
@@ -140,6 +147,7 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:10px;paddi
 
     <h2>As tuas salas</h2>
     <div class="rooms" id="recent"></div>
+    </div>
 
     <button class="link" id="openSetup">⚙ Alterar configuração do Supabase</button>
   </div>
@@ -347,7 +355,22 @@ function rememberRoom(r) {
 function goLobby() {
   $('#nick').value = (state.user && state.user.nick) || '';
   renderColors(); renderRecent(); show('s-lobby');
+  showInvite();
 }
+async function showInvite() {
+  const code = state.pendingCode;
+  $('#invite').style.display = code ? 'block' : 'none';
+  $('#others').style.display = code ? 'none' : '';
+  if (!code) return;
+  try {
+    const { data } = await state.sb.from('rooms').select('name').eq('code', code).maybeSingle();
+    $('#invTitle').textContent = data ? 'Convite para "' + data.name + '"' : 'Convite inválido ou sala inexistente';
+  } catch {}
+}
+$('#invGo').onclick = () => {
+  if (!ensureNick()) return;
+  const c = state.pendingCode; state.pendingCode = null; joinRoom(c);
+};
 function goLobbyOrJoin() {
   if (state.pendingCode && state.user && state.user.nick) {
     const c = state.pendingCode; state.pendingCode = null; joinRoom(c);
@@ -583,10 +606,7 @@ function boot() {
   if (!cfg) { show('s-setup'); return; }
   connect(cfg);
   if (state.pendingCode && !(state.user && state.user.nick)) {
-    $('#roomName').placeholder = 'Convite recebido — escolhe o teu nome e toca em "Entrar"';
-    $('#joinCode').value = state.pendingCode;
     goLobby();
-    toast('Convite recebido: escolhe o teu nome e toca em Entrar', 5000);
   } else goLobbyOrJoin();
 }
 if (!window.supabase) { document.body.innerHTML = '<p style="padding:24px">Não consegui carregar a biblioteca do Supabase. Verifica a ligação à internet.</p>'; }
